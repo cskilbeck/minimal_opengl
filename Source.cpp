@@ -288,30 +288,28 @@ struct gl_window
 
     void set_fullscreen_state(bool new_fullscreen)
     {
-        DWORD style = GetWindowLong(hwnd, GWL_STYLE);
-        int x, y, w, h;
-        HWND insert_after;
-        if(new_fullscreen) {
+        fullscreen = new_fullscreen;
+
+        RECT rc = normal_rect;
+        HWND insert_after = HWND_NOTOPMOST;
+        DWORD style = GetWindowLong(hwnd, GWL_STYLE) | WS_OVERLAPPEDWINDOW;
+
+        if(fullscreen) {
             MONITORINFO mi = { sizeof(mi) };
             GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
-            x = mi.rcMonitor.left;
-            y = mi.rcMonitor.top;
-            w = mi.rcMonitor.right - x;
-            h = mi.rcMonitor.bottom - y;
+            rc = mi.rcMonitor;
             style &= ~WS_OVERLAPPEDWINDOW;
             GetWindowRect(hwnd, &normal_rect);
             insert_after = HWND_TOP;
-        } else {
-            x = normal_rect.left;
-            y = normal_rect.top;
-            w = normal_rect.right - x;
-            h = normal_rect.bottom - y;
-            style |= WS_OVERLAPPEDWINDOW;
-            insert_after = HWND_NOTOPMOST;
         }
-        fullscreen = new_fullscreen;
+
+        int x = rc.left;
+        int y = rc.top;
+        int w = rc.right - x;
+        int h = rc.bottom - y;
+
         SetWindowLongA(hwnd, GWL_STYLE, style);
-        SetWindowPos(hwnd, insert_after, x, y, w, h, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        SetWindowPos(hwnd, insert_after, x, y, w, h, SWP_FRAMECHANGED);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -368,9 +366,7 @@ struct gl_window
             return -3;
         }
 
-        int temp_pixelFormat;
-        PIXELFORMATDESCRIPTOR pixelFormatDesc;
-        memset(&pixelFormatDesc, 0, sizeof(PIXELFORMATDESCRIPTOR));
+        PIXELFORMATDESCRIPTOR pixelFormatDesc = { 0 };
         pixelFormatDesc.nSize = sizeof(PIXELFORMATDESCRIPTOR);
         pixelFormatDesc.nVersion = 1;
         pixelFormatDesc.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
@@ -378,7 +374,7 @@ struct gl_window
         pixelFormatDesc.cColorBits = 32;
         pixelFormatDesc.cAlphaBits = 8;
         pixelFormatDesc.cDepthBits = 24;
-        temp_pixelFormat = ChoosePixelFormat(temp_dc, &pixelFormatDesc);
+        int temp_pixelFormat = ChoosePixelFormat(temp_dc, &pixelFormatDesc);
         if(temp_pixelFormat == 0) {
             return -4;
         }
@@ -391,6 +387,12 @@ struct gl_window
         if(temp_render_context == nullptr) {
             return -6;
         }
+
+        wglMakeCurrent(temp_dc, temp_render_context);
+
+        // get some opengl function pointers
+
+        gl_functions::init();
 
         // create actual window
 
@@ -414,12 +416,6 @@ struct gl_window
             return -9;
         }
 
-        wglMakeCurrent(temp_dc, temp_render_context);
-
-        // get some opengl function pointers
-
-        gl_functions::init();
-
         // create actual render context
 
         // clang-format off
@@ -428,7 +424,7 @@ struct gl_window
             WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
             WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
             WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
-            WGL_SWAP_METHOD_ARB, WGL_SWAP_COPY_ARB, // WGL_SWAP_EXCHANGE_ARB? in fullscreen?
+            WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB, // ? in fullscreen?
             WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
             WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
             WGL_COLOR_BITS_ARB, 32,
