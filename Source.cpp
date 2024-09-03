@@ -234,10 +234,13 @@ struct gl_window
             break;
 
         case WM_KEYDOWN:
+
             switch(wParam) {
+
             case VK_ESCAPE: {
                 DestroyWindow(hwnd);
             } break;
+
             case VK_F11: {
                 set_fullscreen_state(!fullscreen);
             } break;
@@ -266,7 +269,7 @@ struct gl_window
 
     void clear()
     {
-        glClearColor(1, 1, 1, 0);
+        glClearColor(0.1f, 0.2f, 0.5f, 0);
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
@@ -274,12 +277,14 @@ struct gl_window
 
     void draw()
     {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    void swap()
+    void swap() const
     {
         SwapBuffers(window_dc);
     }
@@ -424,7 +429,7 @@ struct gl_window
             WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
             WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
             WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
-            WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB, // ? in fullscreen?
+            WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB,
             WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
             WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
             WGL_COLOR_BITS_ARB, 32,
