@@ -129,11 +129,13 @@
   <ItemGroup>
     <ClCompile Include="gl_functions.cpp" />
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="triangulate.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="glcorearb.h" />
     <ClInclude Include="glext.h" />
     <ClInclude Include="gl_functions.h" />
+    <ClInclude Include="triangulate.h" />
     <ClInclude Include="wglext.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
