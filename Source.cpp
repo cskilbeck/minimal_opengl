@@ -137,7 +137,7 @@ struct gl_program
         if(rc != 0) {
             return rc;
         }
-
+        glUseProgram(program_id);
         return 0;
     }
 
@@ -154,6 +154,7 @@ struct gl_vertex_array
 {
     GLuint vbo_id{};
     GLuint vao_id{};
+    GLuint ibo_id{};
 
     gl_vertex_array() = default;
 
@@ -166,6 +167,7 @@ struct gl_vertex_array
 
         glGenBuffers(1, &vbo_id);
         glGenVertexArrays(1, &vao_id);
+        glGenBuffers(1, &ibo_id);
 
         // x, y, z, r, g, b (triangle)
         float vertices[] = {
@@ -174,16 +176,22 @@ struct gl_vertex_array
             -1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0, //
         };
 
+        GLushort indices[] = {
+            0,1,2
+        };
+
         glBindVertexArray(vao_id);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
+
         glEnableVertexAttribArray(positionLocation);
         glEnableVertexAttribArray(colorLocation);
 
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(0));
         glVertexAttribPointer(colorLocation, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(3 * sizeof(float)));
-
-        glUseProgram(program.program_id);
 
         return 0;
     }
@@ -279,7 +287,7 @@ struct gl_window
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, (GLvoid*)0);
     }
 
     //////////////////////////////////////////////////////////////////////
