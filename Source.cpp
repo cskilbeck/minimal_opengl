@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -169,15 +170,22 @@ struct gl_vertex_array
         glGenVertexArrays(1, &vao_id);
         glGenBuffers(1, &ibo_id);
 
-        // x, y, z, r, g, b (triangle)
-        float vertices[] = {
-            0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, //
-            1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0, //
-            -1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0, //
+        struct vert
+        {
+            float x, y, z;
+            uint32_t color;
         };
 
-        GLushort indices[] = {
-            0,1,2
+        vert vertices[] = {
+            -1.0, -1.0, 0.0, 0xff00ffff,    //
+            +1.0, -1.0, 0.0, 0xffffff00,    //
+            +1.0, +1.0, 0.0, 0xff00ff00,    //
+            -1.0, +1.0, 0.0, 0xffff00ff,    //
+        };
+
+        GLushort indices[6] = {
+            0, 1, 2,    //
+            0, 2, 3,    //
         };
 
         glBindVertexArray(vao_id);
@@ -188,10 +196,14 @@ struct gl_vertex_array
         glEnableVertexAttribArray(colorLocation);
 
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_DYNAMIC_DRAW);
 
-        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(0));
-        glVertexAttribPointer(colorLocation, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *)(3 * sizeof(float)));
+        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(0));
+        glVertexAttribPointer(colorLocation, 4, GL_UNSIGNED_BYTE, GL_TRUE,sizeof(vert), (void *)(offsetof(vert, color)));
+
+        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(i, indices, sizeof(indices));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
         return 0;
     }
@@ -286,8 +298,8 @@ struct gl_window
     void draw()
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, (GLvoid*)0);
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -401,13 +413,15 @@ struct gl_window
             return -6;
         }
 
+        // activate temp render context so we can...
+
         wglMakeCurrent(temp_dc, temp_render_context);
 
-        // get some opengl function pointers
+        // ...get some opengl function pointers
 
         init_gl_functions();
 
-        // create actual window
+        // now opengl functions are available, create actual window
 
         fullscreen = false;
 
@@ -471,9 +485,12 @@ struct gl_window
             return -12;
         }
 
-        // destroy temp window
+        // activate the true render context
 
         wglMakeCurrent(temp_dc, NULL);
+
+        // destroy temp window
+
         wglDeleteContext(temp_render_context);
         ReleaseDC(temp_hwnd, temp_dc);
         DestroyWindow(temp_hwnd);
