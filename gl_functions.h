@@ -1,36 +1,8 @@
 #pragma once
 
-namespace gl_functions
-{
-    void init();
-}
+void init_gl_functions();
 
-extern PFNGLCREATESHADERPROC glCreateShader;
-extern PFNGLSHADERSOURCEPROC glShaderSource;
-extern PFNGLCOMPILESHADERPROC glCompileShader;
-extern PFNGLGETSHADERIVPROC glGetShaderiv;
-extern PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
-extern PFNGLCREATEPROGRAMPROC glCreateProgram;
-extern PFNGLATTACHSHADERPROC glAttachShader;
-extern PFNGLLINKPROGRAMPROC glLinkProgram;
-extern PFNGLVALIDATEPROGRAMPROC glValidateProgram;
-extern PFNGLGETPROGRAMIVPROC glGetProgramiv;
-extern PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
-extern PFNGLGENBUFFERSPROC glGenBuffers;
-extern PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
-extern PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
-extern PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
-extern PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
-extern PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
-extern PFNGLBINDBUFFERPROC glBindBuffer;
-extern PFNGLBUFFERDATAPROC glBufferData;
-extern PFNGLGETVERTEXATTRIBPOINTERVPROC glGetVertexAttribPointerv;
-extern PFNGLUSEPROGRAMPROC glUseProgram;
-extern PFNGLDELETEVERTEXARRAYSPROC glDeleteVertexArrays;
-extern PFNGLDELETEBUFFERSPROC glDeleteBuffers;
-extern PFNGLDELETEPROGRAMPROC glDeleteProgram;
-extern PFNGLDELETESHADERPROC glDeleteShader;
-
-extern PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
-extern PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB;
-extern PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB;
+#undef GL_FUNCTION
+#define GL_FUNCTION(fn_type, fn_name) extern fn_type fn_name
+#include "gl_functions.inc"
+#undef GL_FUNCTION

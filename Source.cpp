@@ -405,7 +405,7 @@ struct gl_window
 
         // get some opengl function pointers
 
-        gl_functions::init();
+        init_gl_functions();
 
         // create actual window
 
