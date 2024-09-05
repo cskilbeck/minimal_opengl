@@ -7,18 +7,18 @@ namespace
     struct Event {
         enum Type { START, END } type;
         int index;
-        Point point;
+        vec2d point;
     };
 
     // Function to determine if a point is above or below a line segment
-    bool is_above(const Point& p, const Point& p1, const Point& p2) {
+    bool is_above(const vec2d& p, const vec2d& p1, const vec2d& p2) {
         return (p2.y - p1.y) * (p.x - p1.x) - (p2.x - p1.x) * (p.y - p1.y) > 0;
     }
 
 }
 
 // Function to triangulate a polygon using the Sweep Line algorithm
-std::vector<Triangle> triangulate_polygon(const std::vector<Point>& points)
+std::vector<triangle> triangulate_polygon(const std::vector<vec2d>& points)
 {
     std::vector<Event> events;
     for (int i = 0; i < points.size(); ++i) {
@@ -31,7 +31,7 @@ std::vector<Triangle> triangulate_polygon(const std::vector<Point>& points)
         });
 
     std::vector<int> activePoints;
-    std::vector<Triangle> triangles;
+    std::vector<triangle> triangles;
 
     for (const Event& e : events) {
         if (e.type == Event::START) {

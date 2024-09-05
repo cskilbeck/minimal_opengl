@@ -1,11 +1,11 @@
 #pragma once
 
-struct Point {
+struct vec2d {
     double x, y;
 };
 
-struct Triangle {
+struct triangle {
     int v1, v2, v3;
 };
 
-std::vector<Triangle> triangulate_polygon(const std::vector<Point>& points);
+std::vector<triangle> triangulate_polygon(const std::vector<vec2d>& points);

@@ -128,7 +128,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="gl_functions.cpp" />
-    <ClCompile Include="Source.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="triangulate.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -139,7 +139,9 @@
     <ClInclude Include="wglext.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="gl_functions.inc" />
+    <ClInclude Include="gl_functions.inc">
+      <FileType>Document</FileType>
+    </ClInclude>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

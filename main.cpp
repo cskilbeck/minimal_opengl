@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <memory>
+#include <functional>
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl/GL.h>
@@ -14,18 +17,37 @@
 
 //////////////////////////////////////////////////////////////////////
 
+namespace
+{
+struct vert
+{
+    float x, y;
+    uint32_t color;
+};
+
+vert vertices[] = {
+    50.0,  50.0,  0xff00ff00,    // ABGR
+    200.0, 50.0,  0xffff0000,    //
+    300.0, 150.0, 0xff0000ff,    //
+    50.0,  150.0, 0xffff00ff,    //
+};
+
+GLushort indices[6] = {
+    0, 1, 2,    //
+    0, 2, 3,    //
+};
+
 char const *vertex_shader_source = R"-----(
 
 #version 400
-in vec3 positionIn;
+in vec2 positionIn;
 in vec4 colorIn;
 out vec4 fragmentColor;
 
-uniform mat4 projection = mat4(1.0);
-uniform mat4 model = mat4(1.0);
+uniform mat4 projection;
 
 void main() {
-    gl_Position = projection * model * vec4(positionIn, 1.0f);
+    gl_Position = projection * vec4(positionIn, 0.0f, 1.0f);
     fragmentColor = colorIn;
 }
 
@@ -44,6 +66,30 @@ void main() {
 
 })-----";
 
+using matrix = float[16];
+
+void make_ortho(matrix mat, int w, int h)
+{
+    mat[0] = 2.0f / w;
+    mat[1] = 0.0f;
+    mat[2] = 0.0f;
+    mat[3] = -1.0f;
+    mat[4] = 0.0f;
+    mat[5] = 2.0f / h;
+    mat[6] = 0.0f;
+    mat[7] = -1.0f;
+    mat[8] = 0.0f;
+    mat[9] = 0.0f;
+    mat[10] = -1.0f;
+    mat[11] = 0.0f;
+    mat[12] = 0.0f;
+    mat[13] = 0.0f;
+    mat[14] = 0.0f;
+    mat[15] = 1.0f;
+}
+
+}    // namespace
+
 //////////////////////////////////////////////////////////////////////
 
 struct gl_program
@@ -51,6 +97,9 @@ struct gl_program
     GLuint program_id{};
     GLuint vertex_shader_id{};
     GLuint fragment_shader_id{};
+    GLuint projection_location{};
+
+    matrix projection_matrix{};
 
     gl_program() = default;
 
@@ -139,7 +188,15 @@ struct gl_program
             return rc;
         }
         glUseProgram(program_id);
+
+        projection_location = glGetUniformLocation(program_id, "projection");
         return 0;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void resize(int w, int h)
+    {
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -163,47 +220,29 @@ struct gl_vertex_array
 
     int init(gl_program &program)
     {
-        GLint positionLocation = glGetAttribLocation(program.program_id, "positionIn");
-        GLint colorLocation = glGetAttribLocation(program.program_id, "colorIn");
-
         glGenBuffers(1, &vbo_id);
         glGenVertexArrays(1, &vao_id);
         glGenBuffers(1, &ibo_id);
+        return 0;
+    }
 
-        struct vert
-        {
-            float x, y, z;
-            uint32_t color;
-        };
-
-        vert vertices[] = {
-            -1.0, -1.0, 0.0, 0xff00ffff,    //
-            +1.0, -1.0, 0.0, 0xffffff00,    //
-            +1.0, +1.0, 0.0, 0xff00ff00,    //
-            -1.0, +1.0, 0.0, 0xffff00ff,    //
-        };
-
-        GLushort indices[6] = {
-            0, 1, 2,    //
-            0, 2, 3,    //
-        };
-
+    int activate(gl_program &program)
+    {
         glBindVertexArray(vao_id);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
         glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
 
+        GLint positionLocation = glGetAttribLocation(program.program_id, "positionIn");
+        GLint colorLocation = glGetAttribLocation(program.program_id, "colorIn");
+
         glEnableVertexAttribArray(positionLocation);
         glEnableVertexAttribArray(colorLocation);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vert) * 8192, nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * 6, nullptr, GL_DYNAMIC_DRAW);
 
-        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(0));
-        glVertexAttribPointer(colorLocation, 4, GL_UNSIGNED_BYTE, GL_TRUE,sizeof(vert), (void *)(offsetof(vert, color)));
-
-        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(i, indices, sizeof(indices));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+        glVertexAttribPointer(positionLocation, 2, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(offsetof(vert, x)));
+        glVertexAttribPointer(colorLocation, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vert), (void *)(offsetof(vert, color)));
 
         return 0;
     }
@@ -235,6 +274,8 @@ struct gl_window
     bool fullscreen{};
     bool quit{};
 
+    std::function<void(int, int)> on_draw{};
+
     static constexpr char const *class_name = "GL_CONTEXT_WINDOW_CLASS";
     static constexpr char const *window_title = "GL Window";
 
@@ -246,12 +287,11 @@ struct gl_window
 
         switch(message) {
 
-        case WM_SIZE:
-            glViewport(0, 0, LOWORD(lParam), HIWORD(lParam));
+        case WM_SIZE: {
             clear();
             draw();
             swap();
-            break;
+        } break;
 
         case WM_KEYDOWN:
 
@@ -275,6 +315,7 @@ struct gl_window
         case WM_DESTROY:
             wglMakeCurrent(window_dc, NULL);
             wglDeleteContext(render_context);
+            render_context = nullptr;
             ReleaseDC(hwnd, window_dc);
             PostQuitMessage(0);
             break;
@@ -289,17 +330,17 @@ struct gl_window
 
     void clear()
     {
-        glClearColor(0.1f, 0.2f, 0.5f, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
     }
 
     //////////////////////////////////////////////////////////////////////
 
     void draw()
     {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        int w = rc.right;
+        int h = rc.bottom;
+        on_draw(w, h);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -360,26 +401,21 @@ struct gl_window
 
         // register window class
 
-        WNDCLASSEXA wcex;
+        WNDCLASSEXA wcex{};
         memset(&wcex, 0, sizeof(wcex));
         wcex.cbSize = sizeof(WNDCLASSEXA);
         wcex.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
         wcex.lpfnWndProc = (WNDPROC)wnd_proc_proxy;
-        wcex.cbClsExtra = 0;
-        wcex.cbWndExtra = 0;
         wcex.hInstance = instance;
         wcex.hIcon = LoadIcon(NULL, IDI_WINLOGO);
         wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wcex.hbrBackground = NULL;
-        wcex.lpszMenuName = NULL;
         wcex.lpszClassName = class_name;
-        wcex.hIconSm = NULL;
 
         if(!RegisterClassExA(&wcex)) {
             return -1;
         }
 
-        // create temp render_context
+        // create temp render context
 
         HWND temp_hwnd = CreateWindowExA(0, class_name, "", 0, 0, 0, 1, 1, nullptr, nullptr, instance, nullptr);
         if(temp_hwnd == nullptr) {
@@ -391,20 +427,20 @@ struct gl_window
             return -3;
         }
 
-        PIXELFORMATDESCRIPTOR pixelFormatDesc = { 0 };
-        pixelFormatDesc.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-        pixelFormatDesc.nVersion = 1;
-        pixelFormatDesc.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
-        pixelFormatDesc.iPixelType = PFD_TYPE_RGBA;
-        pixelFormatDesc.cColorBits = 32;
-        pixelFormatDesc.cAlphaBits = 8;
-        pixelFormatDesc.cDepthBits = 24;
-        int temp_pixelFormat = ChoosePixelFormat(temp_dc, &pixelFormatDesc);
+        PIXELFORMATDESCRIPTOR temp_pixel_format_desc{};
+        temp_pixel_format_desc.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+        temp_pixel_format_desc.nVersion = 1;
+        temp_pixel_format_desc.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+        temp_pixel_format_desc.iPixelType = PFD_TYPE_RGBA;
+        temp_pixel_format_desc.cColorBits = 32;
+        temp_pixel_format_desc.cAlphaBits = 8;
+        temp_pixel_format_desc.cDepthBits = 24;
+        int temp_pixelFormat = ChoosePixelFormat(temp_dc, &temp_pixel_format_desc);
         if(temp_pixelFormat == 0) {
             return -4;
         }
 
-        if(!SetPixelFormat(temp_dc, temp_pixelFormat, &pixelFormatDesc)) {
+        if(!SetPixelFormat(temp_dc, temp_pixelFormat, &temp_pixel_format_desc)) {
             return -5;
         }
 
@@ -425,7 +461,7 @@ struct gl_window
 
         fullscreen = false;
 
-        RECT rect = { 0, 0, 800, 600 };
+        RECT rect{ 0, 0, 800, 600 };
         DWORD style = WS_OVERLAPPEDWINDOW;
         if(!AdjustWindowRect(&rect, style, false)) {
             return -7;
@@ -447,7 +483,7 @@ struct gl_window
 
         // clang-format off
 
-        static constexpr int const pixelAttribs[] = {
+        static constexpr int const pixel_attributes[] = {
             WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
             WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
             WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
@@ -459,7 +495,7 @@ struct gl_window
             WGL_DEPTH_BITS_ARB, 24,
             0 };
 
-        static constexpr int const contextAttributes[] = {
+        static constexpr int const context_attributes[] = {
             WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
             WGL_CONTEXT_MINOR_VERSION_ARB, 0,
             WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
@@ -467,20 +503,21 @@ struct gl_window
 
         // clang-format on
 
-        int pixelFormat;
-        UINT numFormats;
-        BOOL status = wglChoosePixelFormatARB(window_dc, pixelAttribs, nullptr, 1, &pixelFormat, &numFormats);
-        if(!status || numFormats == 0) {
+        int pixel_format;
+        UINT num_formats;
+        BOOL status = wglChoosePixelFormatARB(window_dc, pixel_attributes, nullptr, 1, &pixel_format, &num_formats);
+        if(!status || num_formats == 0) {
             return -10;
         }
-        PIXELFORMATDESCRIPTOR pfd;
-        memset(&pfd, 0, sizeof(PIXELFORMATDESCRIPTOR));
-        DescribePixelFormat(window_dc, pixelFormat, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
 
-        if(!SetPixelFormat(window_dc, pixelFormat, &pfd)) {
+        PIXELFORMATDESCRIPTOR pixel_format_desc{};
+        DescribePixelFormat(window_dc, pixel_format, sizeof(PIXELFORMATDESCRIPTOR), &pixel_format_desc);
+
+        if(!SetPixelFormat(window_dc, pixel_format, &pixel_format_desc)) {
             return -11;
         }
-        render_context = wglCreateContextAttribsARB(window_dc, 0, contextAttributes);
+
+        render_context = wglCreateContextAttribsARB(window_dc, 0, context_attributes);
         if(render_context == nullptr) {
             return -12;
         }
@@ -518,13 +555,38 @@ int main(int, char **)
     gl_vertex_array verts{};
     verts.init(program);
 
+    window.on_draw = [&](int w, int h) {
+
+        glViewport(0, 0, w, h);
+
+        glClearColor(0.1f, 0.2f, 0.5f, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        matrix projection_matrix;
+        make_ortho(projection_matrix, w, h);
+        glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
+
+        verts.activate(program);
+        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(i, indices, sizeof(indices));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+
+        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(v, vertices, sizeof(vertices));
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
+    };
+
     center_window_on_default_monitor(window.hwnd);
 
     ShowWindow(window.hwnd, SW_SHOW);
 
     MSG msg;
     bool quit{ false };
-    do {
+    while(!quit) {
         while(PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if(msg.message == WM_QUIT) {
                 quit = true;
@@ -533,9 +595,10 @@ int main(int, char **)
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
         }
-        window.clear();
-        window.draw();
-        window.swap();
-
-    } while(!quit);
+        if(!quit) {
+            window.clear();
+            window.draw();
+            window.swap();
+        }
+    }
 }
