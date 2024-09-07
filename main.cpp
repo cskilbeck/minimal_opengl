@@ -38,18 +38,6 @@ struct vert
     uint32_t color;
 };
 
-vert vertices[] = {
-    100, 100, 0xff00ff00,    // ABGR
-    700, 100, 0xffff0000,    //
-    700, 500, 0xff0000ff,    //
-    100, 500, 0xffff00ff,    //
-};
-
-GLushort indices[6] = {
-    0, 1, 2,    //
-    0, 2, 3,    //
-};
-
 char const *vertex_shader_source = R"-----(
 
 #version 400
@@ -577,6 +565,9 @@ int main(int, char **)
 
     GLenum fill_mode = GL_FILL;
 
+    int window_width{};
+    int window_height{};
+
     window.on_key_press = [&](int k) {
         switch(k) {
 
@@ -593,18 +584,17 @@ int main(int, char **)
         } break;
 
         case 'C': {
-            triangles.clear();
-            triangle_vertices.clear();
-            triangle_indices.clear();
             points.clear();
         } break;
 
         case 'T': {
+
             TPPLPoly poly;
             poly.Init((long)points.size());
             TPPLPoint *p = poly.GetPoints();
             memcpy(p, points.data(), sizeof(TPPLPoint) * points.size());
             TPPLPartition part;
+            triangles.clear();
             part.Triangulate_MONO(&poly, &triangles);
 
             triangle_vertices.clear();
@@ -631,12 +621,14 @@ int main(int, char **)
 
     window.on_left_click = [&](int x, int y) {
         int n = (int)points.size();
-        y = 600 - y;
-        log("{},{},{}", x, y, n);
-        points.emplace_back((float)x, (float)y, n);
+        points.emplace_back((float)x, (float)(window_height-y), n);
     };
 
     window.on_draw = [&](int w, int h) {
+
+        window_width = w;
+        window_height = h;
+
         glViewport(0, 0, w, h);
 
         glClearColor(0.1f, 0.2f, 0.5f, 0);
@@ -647,17 +639,6 @@ int main(int, char **)
         glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
 
         verts.activate(program);
-
-#if 0
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(i, indices, sizeof(indices));
-        memcpy(v, vertices, sizeof(vertices));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-        glUnmapBuffer(GL_ARRAY_BUFFER);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
-#endif
 
         if(!triangle_vertices.empty()) {
             vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
@@ -686,7 +667,6 @@ int main(int, char **)
             glDrawElements(GL_LINE_STRIP, (GLsizei)points.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
         }
     };
-
 
     center_window_on_default_monitor(window.hwnd);
 
