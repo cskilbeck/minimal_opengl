@@ -575,13 +575,22 @@ int main(int, char **)
     std::vector<vert> triangle_vertices;
     std::vector<GLushort> triangle_indices;
 
-    window.on_key_press = [&](int k) {
+    GLenum fill_mode = GL_FILL;
 
+    window.on_key_press = [&](int k) {
         switch(k) {
 
         case VK_F11:
             window.set_fullscreen_state(!window.fullscreen);
             break;
+
+        case 'M': {
+            if(fill_mode == GL_FILL) {
+                fill_mode = GL_LINE;
+            } else {
+                fill_mode = GL_FILL;
+            }
+        } break;
 
         case 'C': {
             triangles.clear();
@@ -639,9 +648,8 @@ int main(int, char **)
 
         verts.activate(program);
 
+#if 0
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
         GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
         vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
         memcpy(i, indices, sizeof(indices));
@@ -649,20 +657,22 @@ int main(int, char **)
         glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
         glUnmapBuffer(GL_ARRAY_BUFFER);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
+#endif
 
         if(!triangle_vertices.empty()) {
-            v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-            i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+            vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+            GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
             memcpy(v, triangle_vertices.data(), triangle_vertices.size() * sizeof(vert));
             memcpy(i, triangle_indices.data(), triangle_indices.size() * sizeof(GLushort));
             glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
             glUnmapBuffer(GL_ARRAY_BUFFER);
+            glPolygonMode(GL_FRONT_AND_BACK, fill_mode);
             glDrawElements(GL_TRIANGLES, (GLsizei)triangle_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
         }
 
         if(points.size() >= 2) {
-            v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-            i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+            vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+            GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
             for(auto const &n : points) {
                 *i = (GLushort)n.id;
                 v->x = (float)n.x;
