@@ -89,6 +89,17 @@ void make_ortho(matrix mat, int w, int h)
     mat[15] = 1.0f;
 }
 
+bool is_clockwise(std::vector<TPPLPoint> const &points)
+{
+    double t = 0;
+    for(size_t i = 0; i < points.size(); ++i) {
+        size_t n = (i + 1) % points.size();
+        t += (points[n].x - points[i].x) * (points[n].y + points[i].y);
+    }
+    // log("{}:{}", t, t >= 0 ? "Clockwise" : "Counter-clockwise");
+    return t >= 0;
+}
+
 }    // namespace
 
 //////////////////////////////////////////////////////////////////////
@@ -552,7 +563,10 @@ int main(int, char **)
     window.init();
 
     gl_program program;
-    program.init(vertex_shader_source, fragment_shader_source);
+    if(program.init(vertex_shader_source, fragment_shader_source) != 0) {
+        log("exiting");
+        return 0;
+    }
 
     gl_vertex_array verts{};
     verts.init(program);
@@ -569,13 +583,14 @@ int main(int, char **)
     int window_height{};
 
     window.on_key_press = [&](int k) {
+
         switch(k) {
 
         case VK_F11:
             window.set_fullscreen_state(!window.fullscreen);
             break;
 
-        case 'M': {
+        case 'W': {
             if(fill_mode == GL_FILL) {
                 fill_mode = GL_LINE;
             } else {
@@ -589,6 +604,13 @@ int main(int, char **)
 
         case 'T': {
 
+            if(is_clockwise(points)) {
+                log("Reversing points!");
+                std::reverse(points.begin(), points.end());
+                for(int i = 0; i < (int)points.size(); ++i) {
+                    points[i].id = i;
+                }
+            }
             TPPLPoly poly;
             poly.Init((long)points.size());
             TPPLPoint *p = poly.GetPoints();
