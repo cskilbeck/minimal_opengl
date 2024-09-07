@@ -118,10 +118,10 @@ struct gl_program
         if(length != 0) {
             GLchar *infoLog = new GLchar[length];
             glGetShaderInfoLog(shader_id, length, &length, infoLog);
-            printf("Error in shader: %s\n", infoLog);
+            log("Error in shader: {}", infoLog);
             delete[] infoLog;
         } else {
-            printf("Huh? Compile error but no log?\n");
+            log("Huh? Compile error but no log?");
         }
         return -1;
     }
@@ -140,12 +140,12 @@ struct gl_program
         if(length != 0) {
             GLchar *infoLog = new GLchar[length];
             glGetProgramInfoLog(program_id, length, &length, infoLog);
-            printf("Error in program: %s\n", infoLog);
+            log("Error in program: %s", infoLog);
             delete[] infoLog;
         } else if(param == GL_LINK_STATUS) {
-            printf("glLinkProgram failed: Can not link program.\n");
+            log("glLinkProgram failed: Can not link program.");
         } else {
-            printf("glValidateProgram failed: Can not execute shader program.\n");
+            log("glValidateProgram failed: Can not execute shader program.");
         }
         return -1;
     }
