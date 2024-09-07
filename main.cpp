@@ -92,9 +92,8 @@ void make_ortho(matrix mat, int w, int h)
 bool is_clockwise(std::vector<TPPLPoint> const &points)
 {
     double t = 0;
-    for(size_t i = 0; i < points.size(); ++i) {
-        size_t n = (i + 1) % points.size();
-        t += (points[n].x - points[i].x) * (points[n].y + points[i].y);
+    for(size_t i = 0, n = points.size() - 1; i < points.size(); n = i++) {
+        t += (points[i].x - points[n].x) * (points[i].y + points[n].y);
     }
     // log("{}:{}", t, t >= 0 ? "Clockwise" : "Counter-clockwise");
     return t >= 0;
@@ -673,7 +672,7 @@ int main(int, char **)
             glDrawElements(GL_TRIANGLES, (GLsizei)triangle_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
         }
 
-        if(points.size() >= 2) {
+        if(points.size() > 0) {
             vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
             GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
             for(auto const &n : points) {
@@ -686,7 +685,13 @@ int main(int, char **)
             }
             glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
             glUnmapBuffer(GL_ARRAY_BUFFER);
-            glDrawElements(GL_LINE_STRIP, (GLsizei)points.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+            glPointSize(3);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+            glDrawArrays(GL_POINTS, 0, (GLsizei)points.size());
+            if(points.size() >= 2) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                glDrawElements(GL_LINE_STRIP, (GLsizei)points.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+            }
         }
     };
 
