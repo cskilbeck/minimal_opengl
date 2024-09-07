@@ -1,17 +1,24 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <format>
+#include <string>
 #include <memory>
+#include <vector>
 #include <functional>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
 #include <gl/GL.h>
+
+#include <vector>
 
 #include "Wglext.h"
 #include "glcorearb.h"
 
 #include "gl_functions.h"
+#include "polypartition.h"
 
 #pragma comment(lib, "opengl32.lib")
 
@@ -19,6 +26,12 @@
 
 namespace
 {
+template <typename... args> constexpr void log(char const *fmt, args &&...arguments)
+{
+    std::string s = std::vformat(fmt, std::make_format_args(arguments...));
+    puts(s.c_str());
+}
+
 struct vert
 {
     float x, y;
@@ -26,10 +39,10 @@ struct vert
 };
 
 vert vertices[] = {
-    50.0,  50.0,  0xff00ff00,    // ABGR
-    200.0, 50.0,  0xffff0000,    //
-    300.0, 150.0, 0xff0000ff,    //
-    50.0,  150.0, 0xffff00ff,    //
+    100, 100, 0xff00ff00,    // ABGR
+    700, 100, 0xffff0000,    //
+    700, 500, 0xff0000ff,    //
+    100, 500, 0xffff00ff,    //
 };
 
 GLushort indices[6] = {
@@ -239,7 +252,7 @@ struct gl_vertex_array
         glEnableVertexAttribArray(colorLocation);
 
         glBufferData(GL_ARRAY_BUFFER, sizeof(vert) * 8192, nullptr, GL_DYNAMIC_DRAW);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * 6, nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * 8192, nullptr, GL_DYNAMIC_DRAW);
 
         glVertexAttribPointer(positionLocation, 2, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(offsetof(vert, x)));
         glVertexAttribPointer(colorLocation, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vert), (void *)(offsetof(vert, color)));
@@ -275,6 +288,8 @@ struct gl_window
     bool quit{};
 
     std::function<void(int, int)> on_draw{};
+    std::function<void(int, int)> on_left_click{};
+    std::function<void(int)> on_key_press{};
 
     static constexpr char const *class_name = "GL_CONTEXT_WINDOW_CLASS";
     static constexpr char const *window_title = "GL Window";
@@ -288,9 +303,14 @@ struct gl_window
         switch(message) {
 
         case WM_SIZE: {
-            clear();
             draw();
             swap();
+        } break;
+
+        case WM_LBUTTONDOWN: {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+            on_left_click(x, y);
         } break;
 
         case WM_KEYDOWN:
@@ -301,9 +321,9 @@ struct gl_window
                 DestroyWindow(hwnd);
             } break;
 
-            case VK_F11: {
-                set_fullscreen_state(!fullscreen);
-            } break;
+            default:
+                on_key_press((int)wParam);
+                break;
             }
             break;
 
@@ -324,12 +344,6 @@ struct gl_window
             result = DefWindowProcA(hwnd, message, wParam, lParam);
         }
         return result;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void clear()
-    {
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -555,8 +569,65 @@ int main(int, char **)
     gl_vertex_array verts{};
     verts.init(program);
 
-    window.on_draw = [&](int w, int h) {
+    std::vector<TPPLPoint> points;
+    TPPLPolyList triangles;
 
+    std::vector<vert> triangle_vertices;
+    std::vector<GLushort> triangle_indices;
+
+    window.on_key_press = [&](int k) {
+
+        switch(k) {
+
+        case VK_F11:
+            window.set_fullscreen_state(!window.fullscreen);
+            break;
+
+        case 'C': {
+            triangles.clear();
+            triangle_vertices.clear();
+            triangle_indices.clear();
+            points.clear();
+        } break;
+
+        case 'T': {
+            TPPLPoly poly;
+            poly.Init((long)points.size());
+            TPPLPoint *p = poly.GetPoints();
+            memcpy(p, points.data(), sizeof(TPPLPoint) * points.size());
+            TPPLPartition part;
+            part.Triangulate_MONO(&poly, &triangles);
+
+            triangle_vertices.clear();
+            triangle_vertices.reserve(points.size());
+            for(auto const &p : points) {
+                triangle_vertices.emplace_back((float)p.x, (float)p.y, 0xff0000ff);
+            }
+
+            log("{} triangles", triangles.size());
+            triangle_indices.clear();
+            triangle_indices.reserve(triangles.size() * 3);
+            for(auto const &t : triangles) {
+                if(t.GetNumPoints() != 3) {
+                    log("Huh?");
+                } else {
+                    for(int n = 0; n < 3; ++n) {
+                        triangle_indices.push_back(t.GetPoint(n).id);
+                    }
+                }
+            }
+        } break;
+        }
+    };
+
+    window.on_left_click = [&](int x, int y) {
+        int n = (int)points.size();
+        y = 600 - y;
+        log("{},{},{}", x, y, n);
+        points.emplace_back((float)x, (float)y, n);
+    };
+
+    window.on_draw = [&](int w, int h) {
         glViewport(0, 0, w, h);
 
         glClearColor(0.1f, 0.2f, 0.5f, 0);
@@ -567,18 +638,45 @@ int main(int, char **)
         glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
 
         verts.activate(program);
-        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(i, indices, sizeof(indices));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-
-        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(v, vertices, sizeof(vertices));
-        glUnmapBuffer(GL_ARRAY_BUFFER);
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(i, indices, sizeof(indices));
+        memcpy(v, vertices, sizeof(vertices));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+        glUnmapBuffer(GL_ARRAY_BUFFER);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid *)0);
+
+        if(!triangle_vertices.empty()) {
+            v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+            i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+            memcpy(v, triangle_vertices.data(), triangle_vertices.size() * sizeof(vert));
+            memcpy(i, triangle_indices.data(), triangle_indices.size() * sizeof(GLushort));
+            glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+            glUnmapBuffer(GL_ARRAY_BUFFER);
+            glDrawElements(GL_TRIANGLES, (GLsizei)triangle_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+        }
+
+        if(points.size() >= 2) {
+            v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+            i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+            for(auto const &n : points) {
+                *i = (GLushort)n.id;
+                v->x = (float)n.x;
+                v->y = (float)n.y;
+                v->color = 0xffffffff;
+                i += 1;
+                v += 1;
+            }
+            glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+            glUnmapBuffer(GL_ARRAY_BUFFER);
+            glDrawElements(GL_LINE_STRIP, (GLsizei)points.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+        }
     };
+
 
     center_window_on_default_monitor(window.hwnd);
 
@@ -596,7 +694,6 @@ int main(int, char **)
             DispatchMessageA(&msg);
         }
         if(!quit) {
-            window.clear();
             window.draw();
             window.swap();
         }
